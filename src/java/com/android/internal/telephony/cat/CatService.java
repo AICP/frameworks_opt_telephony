@@ -875,6 +875,16 @@ public class CatService extends Handler implements AppInterface {
         startTimeOut(WAITING_SMS_RESULT, WAITING_SMS_RESULT_TIME);
     }
 
+    /**
+     * Samsung STK SEND_USSD
+     * @param cmdPar
+     */
+    private void handleProactiveCommandSendUSSD(SendUSSDParams cmdPar) {
+        CatLog.d(this, "The USSD is: " + cmdPar.ussdString);
+        mCmdIf.sendUSSD(cmdPar.ussdString, null);
+        // Sent USSD, let framework handle the rest
+    }
+
     private void cancelTimeOut() {
         removeMessages(MSG_ID_TIMEOUT);
         mTimeoutDest = 0;
