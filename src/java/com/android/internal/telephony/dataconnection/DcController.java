@@ -279,7 +279,7 @@ class DcController extends StateMachine {
                                         for (ApnContext apnContext : dc.mApnContexts) {
                                              mPhone.notifyDataConnection(
                                                  PhoneConstants.REASON_LINK_PROPERTIES_CHANGED,
-                                                 apnContext.getDataProfileType());
+                                                 apnContext.getApnType());
                                         }
                                     }
                                 } else {

@@ -28,7 +28,7 @@ import android.os.Message;
  * Class used for queuing raw ril messages, decoding them into CommanParams
  * objects and sending the result back to the CAT Service.
  */
-public class RilMessageDecoder extends StateMachine {
+class RilMessageDecoder extends StateMachine {
 
     // constants
     private static final int CMD_START = 1;
@@ -36,13 +36,13 @@ public class RilMessageDecoder extends StateMachine {
 
     // members
     private static RilMessageDecoder sInstance = null;
-    protected CommandParamsFactory mCmdParamsFactory = null;
+    private CommandParamsFactory mCmdParamsFactory = null;
     private RilMessage mCurrentRilMessage = null;
-    protected Handler mCaller = null;
+    private Handler mCaller = null;
 
     // States
-    protected StateStart mStateStart = new StateStart();
-    protected StateCmdParamsReady mStateCmdParamsReady = new StateCmdParamsReady();
+    private StateStart mStateStart = new StateStart();
+    private StateCmdParamsReady mStateCmdParamsReady = new StateCmdParamsReady();
 
     /**
      * Get the singleton instance, constructing if necessary.
@@ -99,10 +99,6 @@ public class RilMessageDecoder extends StateMachine {
 
         mCaller = caller;
         mCmdParamsFactory = CommandParamsFactory.getInstance(this, fh);
-    }
-
-    protected RilMessageDecoder() {
-        super("RilMessageDecoder");
     }
 
     private class StateStart extends State {
@@ -177,15 +173,5 @@ public class RilMessageDecoder extends StateMachine {
             break;
         }
         return decodingStarted;
-    }
-
-    public void dispose() {
-        mStateStart = null;
-        mStateCmdParamsReady = null;
-        mCmdParamsFactory.dispose();
-        mCmdParamsFactory = null;
-        mCurrentRilMessage = null;
-        mCaller = null;
-        sInstance = null;
     }
 }

@@ -148,12 +148,7 @@ public class UsimPhoneBookManager extends Handler implements IccConstants {
 
     private void readEmailFileAndWait(int recNum) {
         Map <Integer,Integer> fileIds;
-        if (mPbrFile == null) {
-            Rlog.e(LOG_TAG, "mPbrFile is NULL, exiting from readEmailFileAndWait");
-            return;
-        } else {
-            fileIds = mPbrFile.mFileIds.get(recNum);
-        }
+        fileIds = mPbrFile.mFileIds.get(recNum);
         if (fileIds == null) return;
 
         if (fileIds.containsKey(USIM_EFEMAIL_TAG)) {
@@ -307,12 +302,7 @@ public class UsimPhoneBookManager extends Handler implements IccConstants {
 
     private void readAdnFileAndWait(int recNum) {
         Map <Integer,Integer> fileIds;
-        if (mPbrFile == null) {
-            Rlog.e(LOG_TAG, "mPbrFile is NULL, exiting from readAdnFileAndWait");
-            return;
-        } else {
-            fileIds = mPbrFile.mFileIds.get(recNum);
-        }
+        fileIds = mPbrFile.mFileIds.get(recNum);
         if (fileIds == null || fileIds.isEmpty()) return;
 
 

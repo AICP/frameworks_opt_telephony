@@ -1,7 +1,5 @@
 /*
  * Copyright (C) 2006, 2012 The Android Open Source Project
- * Copyright (c) 2013, The Linux Foundation. All rights reserved.
- * Not a Contribution.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,16 +60,16 @@ public class UiccCard {
     protected static final boolean DBG = true;
 
     private final Object mLock = new Object();
-    protected CardState mCardState;
+    private CardState mCardState;
     private PinState mUniversalPinState;
     private int mGsmUmtsSubscriptionAppIndex;
     private int mCdmaSubscriptionAppIndex;
     private int mImsSubscriptionAppIndex;
-    protected UiccCardApplication[] mUiccApplications =
+    private UiccCardApplication[] mUiccApplications =
             new UiccCardApplication[IccCardStatus.CARD_MAX_APPS];
-    protected Context mContext;
-    protected CommandsInterface mCi;
-    protected CatService mCatService;
+    private Context mContext;
+    private CommandsInterface mCi;
+    private CatService mCatService;
     private boolean mDestroyed = false; //set to true once this card is commanded to be disposed of.
     private RadioState mLastRadioState =  RadioState.RADIO_UNAVAILABLE;
 
@@ -84,9 +82,6 @@ public class UiccCard {
         if (DBG) log("Creating");
         mCardState = ics.mCardState;
         update(c, ci, ics);
-    }
-
-    protected UiccCard() {
     }
 
     public void dispose() {
@@ -136,7 +131,18 @@ public class UiccCard {
                 }
             }
 
-            createAndUpdateCatService();
+            if (mUiccApplications.length > 0 && mUiccApplications[0] != null) {
+                // Initialize or Reinitialize CatService
+                mCatService = CatService.getInstance(mCi,
+                                                     mContext,
+                                                     this);
+            } else {
+                if (mCatService != null) {
+                    mCatService.dispose();
+                }
+                mCatService = null;
+            }
+
             sanitizeApplicationIndexes();
 
             RadioState radioState = mCi.getRadioState();
@@ -156,19 +162,6 @@ public class UiccCard {
                 }
             }
             mLastRadioState = radioState;
-        }
-    }
-
-    protected void createAndUpdateCatService() {
-        if (mUiccApplications.length > 0 && mUiccApplications[0] != null) {
-            // Initialize or Reinitialize CatService
-            mCatService = CatService.getInstance(mCi,
-                    mContext, this);
-        } else {
-            if (mCatService != null) {
-                mCatService.dispose();
-            }
-            mCatService = null;
         }
     }
 
@@ -363,27 +356,7 @@ public class UiccCard {
         }
     }
 
-    /* Returns number of applications on this card */
-    public int getNumApplications() {
-        int count = 0;
-        for (UiccCardApplication a : mUiccApplications) {
-            if (a != null) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    void onRefresh(IccRefreshResponse refreshResponse){
-        for ( int i = 0; i < mUiccApplications.length; i++) {
-            if (mUiccApplications[i] != null) {
-                // Let the app know that the refresh occurred
-                mUiccApplications[i].onRefresh(refreshResponse);
-            }
-        }
-    }
-
-    protected void log(String msg) {
+    private void log(String msg) {
         Rlog.d(LOG_TAG, msg);
     }
 

@@ -32,23 +32,22 @@ import java.util.HashMap;
  * one icon. Multi, for loading icons list.
  *
  */
-public class IconLoader extends Handler {
+class IconLoader extends Handler {
     // members
     private int mState = STATE_SINGLE_ICON;
     private ImageDescriptor mId = null;
     private Bitmap mCurrentIcon = null;
     private int mRecordNumber;
-    protected IccFileHandler mSimFH = null;
+    private IccFileHandler mSimFH = null;
     private Message mEndMsg = null;
     private byte[] mIconData = null;
     // multi icons state members
     private int[] mRecordNumbers = null;
     private int mCurrentRecordIndex = 0;
     private Bitmap[] mIcons = null;
-    protected HashMap<Integer, Bitmap> mIconsCache = null;
+    private HashMap<Integer, Bitmap> mIconsCache = null;
 
     private static IconLoader sLoader = null;
-    private static HandlerThread sThread = null;
 
     // Loader state values.
     private static final int STATE_SINGLE_ICON = 1;
@@ -74,17 +73,14 @@ public class IconLoader extends Handler {
         mIconsCache = new HashMap<Integer, Bitmap>(50);
     }
 
-    protected IconLoader() {
-    }
-
     static IconLoader getInstance(Handler caller, IccFileHandler fh) {
         if (sLoader != null) {
             return sLoader;
         }
         if (fh != null) {
-            sThread = new HandlerThread("Cat Icon Loader");
-            sThread.start();
-            return new IconLoader(sThread.getLooper(), fh);
+            HandlerThread thread = new HandlerThread("Cat Icon Loader");
+            thread.start();
+            return new IconLoader(thread.getLooper(), fh);
         }
         return null;
     }
@@ -153,9 +149,6 @@ public class IconLoader extends Handler {
                 } else if (mId.mCodingScheme == ImageDescriptor.CODING_SCHEME_COLOUR) {
                     mIconData = rawData;
                     readClut();
-                } else {
-                    // post null icon back to the caller.
-                    postIcon();
                 }
                 break;
             case EVENT_READ_CLUT_DONE:
@@ -363,14 +356,5 @@ public class IconLoader extends Handler {
             break;
         }
         return mask;
-    }
-    public void dispose() {
-        mSimFH = null;
-        if (sThread != null) {
-            sThread.quit();
-            sThread = null;
-        }
-        mIconsCache = null;
-        sLoader = null;
     }
 }

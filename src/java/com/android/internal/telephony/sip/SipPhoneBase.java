@@ -479,6 +479,7 @@ abstract class SipPhoneBase extends PhoneBase {
         return null;
     }
 
+    @Override
     public IccSmsInterfaceManager getIccSmsInterfaceManager(){
         return null;
     }

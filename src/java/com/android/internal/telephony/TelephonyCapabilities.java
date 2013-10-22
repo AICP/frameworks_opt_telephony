@@ -45,8 +45,7 @@ public class TelephonyCapabilities {
      * otherwise.
      */
     public static boolean supportsEcm(Phone phone) {
-        return (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_CDMA ||
-                phone.getPhoneType() == PhoneConstants.PHONE_TYPE_IMS);
+        return (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_CDMA);
     }
 
     /**
@@ -71,13 +70,12 @@ public class TelephonyCapabilities {
     }
 
     /**
-     * Return true if the current phone supports voice message count
-     * and the count is available.
-     * Value of -1 indicates that the count is unavailable.
-     * Both CDMA and GSM phones support voice message count
+     * Return true if the current phone can retrieve the voice message count.
+     *
+     * Currently this is assumed to be true on CDMA phones and false otherwise.
      */
     public static boolean supportsVoiceMessageCount(Phone phone) {
-        return (phone.getVoiceMessageCount() != -1);
+        return (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_CDMA);
     }
 
     /**
@@ -124,16 +122,7 @@ public class TelephonyCapabilities {
      */
     public static boolean supportsConferenceCallManagement(Phone phone) {
         return ((phone.getPhoneType() == PhoneConstants.PHONE_TYPE_GSM)
-                || (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_SIP)
-                || (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_IMS));
-    }
-
-    /**
-     * Return true if the current phone supports the ability to upgrade VO to VT call
-     * or downgrade VT to VO call
-     */
-    public static boolean supportsCallModify(Phone phone) {
-        return (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_IMS);
+                || (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_SIP));
     }
 
     /**
@@ -147,8 +136,7 @@ public class TelephonyCapabilities {
      */
     public static boolean supportsHoldAndUnhold(Phone phone) {
         return ((phone.getPhoneType() == PhoneConstants.PHONE_TYPE_GSM)
-                || (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_SIP)
-                || (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_IMS));
+                || (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_SIP));
     }
 
     /**
@@ -167,8 +155,7 @@ public class TelephonyCapabilities {
      */
     public static boolean supportsAnswerAndHold(Phone phone) {
         return ((phone.getPhoneType() == PhoneConstants.PHONE_TYPE_GSM)
-                || (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_SIP)
-                || (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_IMS));
+                || (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_SIP));
     }
 
     /**
@@ -188,8 +175,7 @@ public class TelephonyCapabilities {
      * something more appropriate.
      */
     public static boolean supportsAdn(int phoneType) {
-        return ((phoneType == PhoneConstants.PHONE_TYPE_GSM)
-                || (phoneType == PhoneConstants.PHONE_TYPE_CDMA));
+        return phoneType == PhoneConstants.PHONE_TYPE_GSM;
     }
 
     /**
