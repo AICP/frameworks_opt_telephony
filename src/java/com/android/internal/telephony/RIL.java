@@ -3410,6 +3410,7 @@ public class RIL extends BaseCommands implements CommandsInterface {
             if (!TextUtils.isEmpty(gateways)) {
                 dataCall.gateways = gateways.split(" ");
             }
+            dataCall.mtu = p.readInt();
         }
         return dataCall;
     }
