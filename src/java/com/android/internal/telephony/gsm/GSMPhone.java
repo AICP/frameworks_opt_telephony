@@ -510,7 +510,10 @@ public class GSMPhone extends PhoneBase {
     @Override
     public GsmCall
     getRingingCall() {
-        return mCT.mRingingCall;
+        if (mCT.mRingingCall != null) {
+            return mCT.mRingingCall;
+        }
+        return null;
     }
 
     private boolean handleCallDeflectionIncallSupplementaryService(
