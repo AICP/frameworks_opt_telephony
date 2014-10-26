@@ -42,6 +42,19 @@ public class CommandException extends RuntimeException {
         MODE_NOT_SUPPORTED,
         FDN_CHECK_FAILURE,
         ILLEGAL_SIM_OR_ME,
+        MISSING_RESOURCE,
+        NO_SUCH_ELEMENT,
+        INVALID_PARAMETER,
+        DIAL_MODIFIED_TO_USSD,
+        DIAL_MODIFIED_TO_SS,
+        DIAL_MODIFIED_TO_DIAL,
+        USSD_MODIFIED_TO_DIAL,
+        USSD_MODIFIED_TO_SS,
+        USSD_MODIFIED_TO_USSD,
+        SS_MODIFIED_TO_DIAL,
+        SS_MODIFIED_TO_USSD,
+        SS_MODIFIED_TO_SS,
+        SUBSCRIPTION_NOT_SUPPORTED,
     }
 
     public CommandException(Error e) {
@@ -52,7 +65,8 @@ public class CommandException extends RuntimeException {
     public static CommandException
     fromRilErrno(int ril_errno) {
         switch(ril_errno) {
-            case RILConstants.SUCCESS:                       return null;
+            case RILConstants.SUCCESS:
+                return null;
             case RILConstants.RIL_ERRNO_INVALID_RESPONSE:
                 return new CommandException(Error.INVALID_RESPONSE);
             case RILConstants.RADIO_NOT_AVAILABLE:
@@ -83,6 +97,32 @@ public class CommandException extends RuntimeException {
                 return new CommandException(Error.FDN_CHECK_FAILURE);
             case RILConstants.ILLEGAL_SIM_OR_ME:
                 return new CommandException(Error.ILLEGAL_SIM_OR_ME);
+            case RILConstants.MISSING_RESOURCE:
+                 return new CommandException(Error.MISSING_RESOURCE);
+            case RILConstants.NO_SUCH_ELEMENT:
+                 return new CommandException(Error.NO_SUCH_ELEMENT);
+            case RILConstants.INVALID_PARAMETER:
+                 return new CommandException(Error.INVALID_PARAMETER);
+            case RILConstants.DIAL_MODIFIED_TO_USSD:
+                return new CommandException(Error.DIAL_MODIFIED_TO_USSD);
+            case RILConstants.DIAL_MODIFIED_TO_SS:
+                return new CommandException(Error.DIAL_MODIFIED_TO_SS);
+            case RILConstants.DIAL_MODIFIED_TO_DIAL:
+                return new CommandException(Error.DIAL_MODIFIED_TO_DIAL);
+            case RILConstants.USSD_MODIFIED_TO_DIAL:
+                return new CommandException(Error.USSD_MODIFIED_TO_DIAL);
+            case RILConstants.USSD_MODIFIED_TO_SS:
+                return new CommandException(Error.USSD_MODIFIED_TO_SS);
+            case RILConstants.USSD_MODIFIED_TO_USSD:
+                return new CommandException(Error.USSD_MODIFIED_TO_USSD);
+            case RILConstants.SS_MODIFIED_TO_DIAL:
+                return new CommandException(Error.SS_MODIFIED_TO_DIAL);
+            case RILConstants.SS_MODIFIED_TO_USSD:
+                return new CommandException(Error.SS_MODIFIED_TO_USSD);
+            case RILConstants.SS_MODIFIED_TO_SS:
+                return new CommandException(Error.SS_MODIFIED_TO_SS);
+            case RILConstants.SUBSCRIPTION_NOT_SUPPORTED:
+                return new CommandException(Error.SUBSCRIPTION_NOT_SUPPORTED);
             default:
                 Rlog.e("GSM", "Unrecognized RIL errno " + ril_errno);
                 return new CommandException(Error.INVALID_RESPONSE);
