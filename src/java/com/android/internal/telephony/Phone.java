@@ -1448,6 +1448,11 @@ public interface Phone {
     boolean isDataConnectivityPossible();
 
     /**
+     * Report on whether on-demand data connectivity is allowed.
+     */
+    boolean isOnDemandDataPossible(String apnType);
+
+    /**
      * Report on whether data connectivity is allowed for an APN.
      */
     boolean isDataConnectivityPossible(String apnType);
@@ -1824,6 +1829,12 @@ public interface Phone {
      */
     boolean isCspPlmnEnabled();
 
+    /* Checks if manual network selection is allowed
+     * @return true if manual network selection is allowed
+     * @return false if manual network selection is not allowed
+     */
+    public boolean isManualNetSelAllowed();
+
     /**
      * Return an interface to retrieve the ISIM records for IMS, if available.
      * @return the interface to retrieve the ISIM records, or null if not supported
@@ -1979,4 +1990,6 @@ public interface Phone {
      * @param lchStatus, true if call is in lch state
      */
     public void setLocalCallHold(int lchStatus);
+
+    public boolean isImsVtCallPresent();
 }

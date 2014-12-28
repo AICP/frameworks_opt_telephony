@@ -44,6 +44,7 @@ import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.telephony.DefaultPhoneNotifier;
 import com.android.internal.telephony.SubscriptionController;
+import com.android.internal.telephony.dataconnection.DdsScheduler;
 
 import android.util.Log;
 import java.util.HashSet;
@@ -153,6 +154,17 @@ public class DctController extends Handler {
         }
     };
 
+    boolean isActiveSubId(long subId) {
+        long[] activeSubs = mSubController.getActiveSubIdList();
+        for (int i = 0; i < activeSubs.length; i++) {
+            if (subId == activeSubs[i]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
     private class DataStateReceiver extends BroadcastReceiver {
         public void onReceive(Context context, Intent intent) {
             synchronized(this) {
@@ -161,12 +173,12 @@ public class DctController extends Handler {
 
                     long subId = intent.getLongExtra(PhoneConstants.SUBSCRIPTION_KEY, PhoneConstants.SUB1);
                     int phoneId = SubscriptionManager.getPhoneId(subId);
-                    logd("DataStateReceiver: phoneId= " + phoneId);
-
                     // for the case of network out of service when bootup (ignore dummy values too)
-                    if (!SubscriptionManager.isValidSubId(subId) || (subId < 0)) {
+                    if (!SubscriptionManager.isValidSubId(subId) || (subId < 0) ||
+                            !isActiveSubId(subId)) {
                         // FIXME: Maybe add SM.isRealSubId(subId)??
-                        logd("DataStateReceiver: ignore invalid subId=" + subId);
+                        logd("DataStateReceiver: ignore invalid subId=" + subId
+                                + " phoneId = " + phoneId);
                         return;
                     }
                     if (!SubscriptionManager.isValidPhoneId(phoneId)) {
@@ -232,6 +244,7 @@ public class DctController extends Handler {
     public static DctController makeDctController(PhoneProxy[] phones, Looper looper) {
         if (sDctController == null) {
             sDctController = new DctController(phones, looper);
+            DdsScheduler.init();
         }
         return sDctController;
     }
@@ -518,8 +531,7 @@ public class DctController extends Handler {
             // This generally happens when device power-up first time.
             logd(" setDefaultDataSubId,  reqSubId = " + reqSubId + " currentDdsPhoneId  "
                     + currentDdsPhoneId);
-            Settings.Global.putLong(mContext.getContentResolver(),
-                    Settings.Global.MULTI_SIM_DATA_CALL_SUBSCRIPTION, reqSubId);
+            mSubController.setDataSubId(reqSubId);
             defaultDds = reqSubId;
             currentDdsPhoneId = mSubController.getPhoneId(defaultDds);
         }
@@ -689,7 +701,7 @@ public class DctController extends Handler {
                     Rlog.d(LOG_TAG, "EVENT_SET_DATA_ALLOWED_DONE  phoneId :" + subId[0]
                             + ", switchInfo = " + s);
 
-                    if(ar.exception != null) {
+                    if (ar.exception != null) {
                         Rlog.d(LOG_TAG, "Failed, switchInfo = " + s
                                 + " attempt delayed retry");
                         s.incRetryCount();
@@ -710,7 +722,7 @@ public class DctController extends Handler {
                     if (s.mIsDefaultDataSwitchRequested) {
                         mNotifyDefaultDataSwitchInfo.notifyRegistrants(
                                 new AsyncResult(null, subId[0], errorEx));
-                    }else if (s.mIsOnDemandPsAttachRequested) {
+                    } else if (s.mIsOnDemandPsAttachRequested) {
                         mNotifyOnDemandPsAttach.notifyRegistrants(
                                 new AsyncResult(null, s.mNetworkRequest, errorEx));
                     } else {

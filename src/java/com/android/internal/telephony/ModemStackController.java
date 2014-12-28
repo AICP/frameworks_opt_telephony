@@ -140,6 +140,7 @@ public class ModemStackController extends Handler {
     private static final int SUCCESS = 1;
     private static final int FAILURE = 0;
     private static final int PRIMARY_STACK_ID = 0;
+    private static final int DEFAULT_MAX_DATA_ALLOWED = 1;
 
     //***** Class Variables
     private static ModemStackController sModemStackController;
@@ -199,6 +200,22 @@ public class ModemStackController extends Handler {
                         sendMessage(msg);
                     }
                 }
+            } else if (TelephonyIntents.ACTION_SUBSCRIPTION_SET_UICC_RESULT.
+                    equals(intent.getAction())) {
+                long subId = intent.getLongExtra(PhoneConstants.SUBSCRIPTION_KEY,
+                        SubscriptionManager.INVALID_SUB_ID);
+                int phoneId = intent.getIntExtra(PhoneConstants.PHONE_KEY,
+                        PhoneConstants.PHONE_ID1);
+                int status = intent.getIntExtra(TelephonyIntents.EXTRA_RESULT,
+                        PhoneConstants.FAILURE);
+                logd("Received ACTION_SUBSCRIPTION_SET_UICC_RESULT on subId: " + subId
+                        + "phoneId " + phoneId + " status: " + status);
+                if (mDeactivationInProgress && (status == PhoneConstants.FAILURE)) {
+                    // Sub deactivation failed
+                    Message msg = obtainMessage(EVENT_SUB_DEACTIVATED, new Integer(phoneId));
+                    AsyncResult.forMessage(msg, SubscriptionStatus.SUB_ACTIVATED, null);
+                    sendMessage(msg);
+                }
             }
         }};
 
@@ -249,6 +266,7 @@ public class ModemStackController extends Handler {
         IntentFilter filter =
                 new IntentFilter(TelephonyIntents.ACTION_EMERGENCY_CALLBACK_MODE_CHANGED);
         filter.addAction(TelephonyIntents.ACTION_SUBINFO_CONTENT_CHANGE);
+        filter.addAction(TelephonyIntents.ACTION_SUBSCRIPTION_SET_UICC_RESULT);
         mContext.registerReceiver(mReceiver, filter);
         logd("Constructor - Exit");
     }
@@ -624,14 +642,20 @@ public class ModemStackController extends Handler {
 
     public int getMaxDataAllowed() {
         logd("getMaxDataAllowed");
-        List<Integer> unsortedList = new ArrayList<Integer>(mNumPhones);
+        int ret = DEFAULT_MAX_DATA_ALLOWED;
+        List<Integer> unsortedList = new ArrayList<Integer>();
 
         for (int i = 0; i < mNumPhones; i++) {
-            unsortedList.add(mModemCapInfo[i].getMaxDataCap());
+            if (mModemCapInfo[i] != null) {
+                unsortedList.add(mModemCapInfo[i].getMaxDataCap());
+            }
         }
         Collections.sort(unsortedList);
-
-        return unsortedList.get(mNumPhones-1);
+        int listSize = unsortedList.size();
+        if (listSize > 0) {
+            ret = unsortedList.get(listSize - 1);
+        }
+        return ret;
     }
 
     public int getCurrentStackIdForPhoneId(int phoneId) {

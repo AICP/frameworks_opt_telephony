@@ -26,10 +26,12 @@ import android.os.Message;
 import android.os.Registrant;
 import android.os.RegistrantList;
 
+import android.telephony.TelephonyManager;
 import com.android.internal.telephony.CommandsInterface;
 import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppState;
 import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppType;
 import com.android.internal.telephony.PhoneConstants;
+import com.android.internal.telephony.SubscriptionController;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -103,12 +105,12 @@ public abstract class IccRecords extends Handler implements IccConstants {
 
     public static final int EVENT_GET_ICC_RECORD_DONE = 100;
     public static final int EVENT_REFRESH = 31; // ICC refresh occurred
+    protected static final int EVENT_GET_SMS_RECORD_SIZE_DONE = 28;
     public static final int EVENT_REFRESH_OEM = 29;
     protected static final int EVENT_APP_READY = 1;
     private static final int EVENT_AKA_AUTHENTICATE_DONE          = 90;
 
     private boolean mOEMHookSimRefresh = false;
-    protected static final int EVENT_GET_SMS_RECORD_SIZE_DONE = 35;
 
     @Override
     public String toString() {
@@ -848,5 +850,15 @@ public abstract class IccRecords extends Handler implements IccConstants {
     protected boolean powerOffOnSimReset() {
         return !mContext.getResources().getBoolean(
                 com.android.internal.R.bool.skip_radio_power_off_on_sim_refresh_reset);
+    }
+
+    protected void setSystemProperty(String property, String value) {
+        if (mParentApp == null) return;
+        int slotId = mParentApp.getUiccCard().getSlotId();
+
+        SubscriptionController subController = SubscriptionController.getInstance();
+        long subId = subController.getSubIdUsingSlotId(slotId)[0];
+
+        TelephonyManager.setTelephonyProperty(property, subId, value);
     }
 }

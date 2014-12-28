@@ -17,6 +17,7 @@
 package com.android.internal.telephony.imsphone;
 
 import android.content.Context;
+import android.net.Uri;
 import android.os.AsyncResult;
 import android.os.Bundle;
 import android.os.Handler;
@@ -25,6 +26,7 @@ import android.os.Message;
 import android.os.PowerManager;
 import android.os.Registrant;
 import android.os.SystemClock;
+import android.telecom.Log;
 import android.telephony.DisconnectCause;
 import android.telephony.PhoneNumberUtils;
 import android.telephony.Rlog;
@@ -74,9 +76,6 @@ public class ImsPhoneConnection extends Connection {
     private int mCause = DisconnectCause.NOT_DISCONNECTED;
     private PostDialState mPostDialState = PostDialState.NOT_STARTED;
     private UUSInfo mUusInfo;
-
-    private boolean mIsMultiparty = false;
-
     private Handler mHandler;
 
     private PowerManager.WakeLock mPartialWakeLock;
@@ -135,8 +134,7 @@ public class ImsPhoneConnection extends Connection {
 
             ImsCallProfile imsCallProfile = imsCall.getCallProfile();
             if (imsCallProfile != null) {
-                int callType = imsCall.getCallProfile().mCallType;
-                setVideoState(ImsCallProfile.getVideoStateFromCallType(callType));
+                setVideoState(ImsCallProfile.getVideoStateFromImsCallProfile(imsCallProfile));
 
                 ImsStreamMediaProfile mediaProfile = imsCallProfile.mMediaProfile;
                 if (mediaProfile != null) {
@@ -148,11 +146,17 @@ public class ImsPhoneConnection extends Connection {
             try {
                 ImsCallProfile localCallProfile = imsCall.getLocalCallProfile();
                 if (localCallProfile != null) {
-                    int localCallTypeCapability = localCallProfile.mCallType;
-                    boolean isLocalVideoCapable = localCallTypeCapability
+                    boolean isLocalVideoCapable = localCallProfile.mCallType
                             == ImsCallProfile.CALL_TYPE_VT;
 
                     setLocalVideoCapable(isLocalVideoCapable);
+                }
+                ImsCallProfile remoteCallProfile = imsCall.getRemoteCallProfile();
+                if (remoteCallProfile != null) {
+                    boolean isRemoteVideoCapable = remoteCallProfile.mCallType
+                            == ImsCallProfile.CALL_TYPE_VT;
+
+                    setRemoteVideoCapable(isRemoteVideoCapable);
                 }
             } catch (ImsException e) {
                 // No session, so cannot get local capabilities.
@@ -590,15 +594,9 @@ public class ImsPhoneConnection extends Connection {
         return null;
     }
 
-    /* package */ void
-    setMultiparty(boolean isMultiparty) {
-        Rlog.d(LOG_TAG, "setMultiparty " + isMultiparty);
-        mIsMultiparty = isMultiparty;
-    }
-
     @Override
     public boolean isMultiparty() {
-        return mIsMultiparty;
+        return mImsCall != null && mImsCall.isMultiparty();
     }
 
     /*package*/ ImsCall getImsCall() {
@@ -646,9 +644,10 @@ public class ImsPhoneConnection extends Connection {
                 // Get the current local VT capabilities (i.e. even if currentCallType above is
                 // audio-only, the local capability could support bi-directional video).
                 ImsCallProfile localCallProfile = imsCall.getLocalCallProfile();
+                Rlog.d(LOG_TAG, " update localCallProfile=" + localCallProfile
+                        + "isLocalVideoCapable()= " + isLocalVideoCapable());
                 if (localCallProfile != null) {
-                    int localCallTypeCapability = localCallProfile.mCallType;
-                    boolean newLocalVideoCapable = localCallTypeCapability
+                    boolean newLocalVideoCapable = localCallProfile.mCallType
                             == ImsCallProfile.CALL_TYPE_VT;
 
                     if (isLocalVideoCapable() != newLocalVideoCapable) {
@@ -656,6 +655,29 @@ public class ImsPhoneConnection extends Connection {
                         changed = true;
                     }
                 }
+
+                ImsCallProfile remoteCallProfile = imsCall.getRemoteCallProfile();
+                Rlog.d(LOG_TAG, " update remoteCallProfile=" + remoteCallProfile
+                        + "isRemoteVideoCapable()= " + isRemoteVideoCapable());
+                if (remoteCallProfile != null) {
+                    boolean newRemoteVideoCapable = remoteCallProfile.mCallType
+                            == ImsCallProfile.CALL_TYPE_VT;
+
+                    if (isRemoteVideoCapable() != newRemoteVideoCapable) {
+                        setRemoteVideoCapable(newRemoteVideoCapable);
+                        changed = true;
+                    }
+                }
+
+                // Check if call substate has changed. If so notify listeners of call state changed.
+                int callSubstate = getCallSubstate();
+                int newCallSubstate = imsCall.getCallSubstate();
+
+                if (callSubstate != newCallSubstate) {
+                    setCallSubstate(newCallSubstate);
+                    changed = true;
+                }
+
             } catch (ImsException e) {
                 // No session in place -- no change
             }
@@ -665,7 +687,7 @@ public class ImsPhoneConnection extends Connection {
             ImsCallProfile callProfile = imsCall.getCallProfile();
             if (callProfile != null) {
                 int oldVideoState = getVideoState();
-                int newVideoState = ImsCallProfile.getVideoStateFromCallType(callProfile.mCallType);
+                int newVideoState = ImsCallProfile.getVideoStateFromImsCallProfile(callProfile);
 
                 if (oldVideoState != newVideoState) {
                     setVideoState(newVideoState);
@@ -694,6 +716,50 @@ public class ImsPhoneConnection extends Connection {
 
     public Bundle getCallExtras() {
         return mCallExtras;
+    }
+
+    /**
+     * Notifies this Connection of a request to disconnect a participant of the conference managed
+     * by the connection.
+     *
+     * @param endpoint the {@link android.net.Uri} of the participant to disconnect.
+     */
+    @Override
+    public void onDisconnectConferenceParticipant(Uri endpoint) {
+        ImsCall imsCall = getImsCall();
+        if (imsCall == null) {
+            return;
+        }
+        try {
+            imsCall.removeParticipants(new String[]{endpoint.toString()});
+        } catch (ImsException e) {
+            // No session in place -- no change
+            Rlog.e(LOG_TAG, "onDisconnectConferenceParticipant: no session in place. "+
+                    "Failed to disconnect endpoint = " + endpoint);
+        }
+    }
+
+    /**
+     * Provides a string representation of the {@link ImsPhoneConnection}.  Primarily intended for
+     * use in log statements.
+     *
+     * @return String representation of call.
+     */
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("[ImsPhoneConnection objId: ");
+        sb.append(System.identityHashCode(this));
+        sb.append(" address:");
+        sb.append(Log.pii(getAddress()));
+        sb.append(" ImsCall:");
+        if (mImsCall == null) {
+            sb.append("null");
+        } else {
+            sb.append(mImsCall);
+        }
+        sb.append("]");
+        return sb.toString();
     }
 }
 

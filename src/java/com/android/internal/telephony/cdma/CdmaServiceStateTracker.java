@@ -20,6 +20,7 @@ import android.app.AlarmManager;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.os.AsyncResult;
 import android.os.Build;
@@ -304,8 +305,12 @@ public class CdmaServiceStateTracker extends ServiceStateTracker {
             if (DBG) log("Receive EVENT_RUIM_READY");
             pollState();
 
-            // Only support automatic selection mode in CDMA.
-            mPhone.setNetworkSelectionModeAutomatic(null);
+            boolean skipRestoringSelection = mPhone.getContext().getResources().getBoolean(
+                    com.android.internal.R.bool.skip_restoring_network_selection);
+            if (!skipRestoringSelection) {
+                 // Only support automatic selection mode in CDMA.
+                 mPhone.setNetworkSelectionModeAutomatic(null);
+            }
 
             mPhone.prepareEri();
             break;
@@ -579,6 +584,14 @@ public class CdmaServiceStateTracker extends ServiceStateTracker {
         // mOperatorAlphaLong contains the ERI text
         String plmn = mSS.getOperatorAlphaLong();
 
+        int combinedRegState = getCombinedRegState();
+        if (combinedRegState == ServiceState.STATE_OUT_OF_SERVICE) {
+            plmn = Resources.getSystem().getText(com.android.internal.
+                    R.string.lockscreen_carrier_default).toString();
+            if (DBG) log("updateSpnDisplay: radio is on but out " +
+                    "of service, set plmn='" + plmn + "'");
+        }
+
         if (!TextUtils.equals(plmn, mCurPlmn)) {
             // Allow A blank plmn, "" to set showPlmn to true. Previously, we
             // would set showPlmn to true only if plmn was not empty, i.e. was not
@@ -600,6 +613,23 @@ public class CdmaServiceStateTracker extends ServiceStateTracker {
         }
 
         mCurPlmn = plmn;
+    }
+
+    /**
+     * Consider dataRegState if voiceRegState is OOS to determine SPN to be
+     * displayed
+     */
+    private int getCombinedRegState() {
+        int regState = mSS.getVoiceRegState();
+        int dataRegState = mSS.getDataRegState();
+
+        if ((regState == ServiceState.STATE_OUT_OF_SERVICE)
+                && (dataRegState == ServiceState.STATE_IN_SERVICE)) {
+            log("getCombinedRegState: return STATE_IN_SERVICE as Data is in service");
+            regState = dataRegState;
+        }
+
+        return regState;
     }
 
     @Override

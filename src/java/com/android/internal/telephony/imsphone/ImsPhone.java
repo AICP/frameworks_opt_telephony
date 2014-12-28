@@ -81,6 +81,7 @@ import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.telephony.cdma.CDMAPhone;
 import com.android.internal.telephony.gsm.GSMPhone;
+import com.android.internal.telephony.gsm.SuppServiceNotification;
 import com.android.internal.telephony.uicc.IccRecords;
 
 import java.util.ArrayList;
@@ -126,6 +127,13 @@ public class ImsPhone extends ImsPhoneBase {
     private Registrant mEcmExitRespRegistrant;
 
     private final RegistrantList mSilentRedialRegistrants = new RegistrantList();
+
+    // List of Registrants to send supplementary service notifications to.
+    RegistrantList mSsnRegistrants = new RegistrantList();
+
+    // Variable to cache the video capabilitity. In cases where we delete/re-create the phone
+    // this information is getting lost.
+    private boolean mIsVideoCapable = false;
 
     // A runnable which is used to automatically exit from Ecm after a period of time.
     private Runnable mExitEcmRunnable = new Runnable() {
@@ -176,6 +184,11 @@ public class ImsPhone extends ImsPhoneBase {
         // synchronization is managed at the PhoneBase scope (which calls this function)
         mDefaultPhone = parentPhone;
         mPhoneId = mDefaultPhone.getPhoneId();
+
+        // When the parent phone is updated, we need to notify listeners of the cached video
+        // capability.
+        Rlog.d(LOG_TAG, "updateParentPhone - Notify video capability changed " + mIsVideoCapable);
+        notifyForVideoCapabilityChanged(mIsVideoCapable);
     }
 
     @Override
@@ -414,6 +427,13 @@ public class ImsPhone extends ImsPhoneBase {
         return true;
     }
 
+    public void notifySuppSvcNotification(SuppServiceNotification suppSvc) {
+        Rlog.d(LOG_TAG, "notifySuppSvcNotification: suppSvc = " + suppSvc);
+
+        AsyncResult ar = new AsyncResult(null, suppSvc, null);
+        mSsnRegistrants.notifyRegistrants(ar);
+    }
+
     @Override
     public boolean handleInCallMmiCommands(String dialString) {
         if (!isInCall()) {
@@ -469,6 +489,7 @@ public class ImsPhone extends ImsPhoneBase {
     }
 
     public void notifyForVideoCapabilityChanged(boolean isVideoCapable) {
+        mIsVideoCapable = isVideoCapable;
         mDefaultPhone.notifyForVideoCapabilityChanged(isVideoCapable);
     }
 
@@ -554,18 +575,18 @@ public class ImsPhone extends ImsPhoneBase {
     @Override
     public void
     startDtmf(char c) {
-        if (!PhoneNumberUtils.is12Key(c)) {
+        if (!(PhoneNumberUtils.is12Key(c) || (c >= 'A' && c <= 'D'))) {
             Rlog.e(LOG_TAG,
                     "startDtmf called with invalid character '" + c + "'");
         } else {
-            sendDtmf(c);
+            mCT.startDtmf(c);
         }
     }
 
     @Override
     public void
     stopDtmf() {
-        // no op
+        mCT.stopDtmf();
     }
 
     @Override
@@ -1018,6 +1039,17 @@ public class ImsPhone extends ImsPhoneBase {
 
     public void unregisterForSilentRedial(Handler h) {
         mSilentRedialRegistrants.remove(h);
+    }
+
+    @Override
+    public void registerForSuppServiceNotification(
+            Handler h, int what, Object obj) {
+        mSsnRegistrants.addUnique(h, what, obj);
+    }
+
+    @Override
+    public void unregisterForSuppServiceNotification(Handler h) {
+        mSsnRegistrants.remove(h);
     }
 
     @Override

@@ -302,6 +302,10 @@ public class PhoneProxy extends Handler implements Phone {
         return ((PhoneBase)mActivePhone).getIccFileHandler();
     }
 
+    public boolean isImsVtCallPresent() {
+        return mActivePhone.isImsVtCallPresent();
+    }
+
     @Override
     public void updatePhoneObject(int voiceRadioTech) {
         logd("updatePhoneObject: radioTechnology=" + voiceRadioTech);
@@ -1011,6 +1015,11 @@ public class PhoneProxy extends Handler implements Phone {
     }
 
     @Override
+    public boolean isOnDemandDataPossible(String apnType) {
+        return mActivePhone.isOnDemandDataPossible(apnType);
+    }
+
+    @Override
     public boolean isDataConnectivityPossible(String apnType) {
         return mActivePhone.isDataConnectivityPossible(apnType);
     }
@@ -1242,6 +1251,10 @@ public class PhoneProxy extends Handler implements Phone {
     @Override
     public void unsetOnEcbModeExitResponse(Handler h){
         mActivePhone.unsetOnEcbModeExitResponse(h);
+    }
+
+    public boolean isManualNetSelAllowed() {
+        return mActivePhone.isManualNetSelAllowed();
     }
 
     @Override

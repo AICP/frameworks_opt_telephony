@@ -33,12 +33,15 @@ package com.android.internal.telephony;
 
 import android.telephony.Rlog;
 import android.content.Context;
+import android.content.Intent;
 import android.database.ContentObserver;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.os.AsyncResult;
 import android.os.Handler;
 import android.os.Message;
+import android.os.UserHandle;
+import android.os.SystemProperties;
 import android.telephony.TelephonyManager;
 import android.telephony.SubscriptionManager;
 import android.util.Log;
@@ -60,10 +63,17 @@ class SubscriptionHelper extends Handler {
     private static int sNumPhones;
     // This flag is used to trigger Dds during boot-up
     // and when flex mapping performed
-    private static boolean sTriggerDds = true;
+    private static boolean sTriggerDds = false;
+
+    private static final String APM_SIM_NOT_PWDN_PROPERTY = "persist.radio.apm_sim_not_pwdn";
+    private static final boolean sApmSIMNotPwdn = (SystemProperties.getInt(
+            APM_SIM_NOT_PWDN_PROPERTY, 0) == 1);
 
     private static final int EVENT_SET_UICC_SUBSCRIPTION_DONE = 1;
+    private static final int EVENT_REFRESH = 2;
+    private static final int EVENT_REFRESH_OEM = 3;
 
+    public static final int SUB_SET_UICC_FAIL = -100;
     public static final int SUB_SIM_NOT_INSERTED = -99;
     public static final int SUB_INIT_STATE = -1;
     private static boolean mNwModeUpdated = false;
@@ -106,12 +116,20 @@ class SubscriptionHelper extends Handler {
         mSubStatus = new int[sNumPhones];
         for (int i=0; i < sNumPhones; i++ ) {
             mSubStatus[i] = SUB_INIT_STATE;
+            Integer index = new Integer(i);
+            if (mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_sim_refresh_for_dual_mode_card)) {
+                mCi[i].registerForSimRefreshEvent(this, EVENT_REFRESH_OEM, index);
+            } else {
+                mCi[i].registerForIccRefresh(this, EVENT_REFRESH, index);
+            }
         }
         mContext.getContentResolver().registerContentObserver(Settings.Global.getUriFor(
                 Settings.Global.PREFERRED_NETWORK_MODE), false, nwModeObserver);
 
 
-        logd("SubscriptionHelper init by Context, num phones = " + sNumPhones);
+        logd("SubscriptionHelper init by Context, num phones = "
+                + sNumPhones + " ApmSIMNotPwdn = " + sApmSIMNotPwdn);
     }
 
     private void updateNwModesInSubIdTable(boolean override) {
@@ -143,10 +161,20 @@ class SubscriptionHelper extends Handler {
 
     @Override
     public void handleMessage(Message msg) {
+        Integer index = new Integer(PhoneConstants.DEFAULT_CARD_INDEX);
+        AsyncResult ar;
         switch(msg.what) {
             case EVENT_SET_UICC_SUBSCRIPTION_DONE:
                 logd("EVENT_SET_UICC_SUBSCRIPTION_DONE");
                 processSetUiccSubscriptionDone(msg);
+                break;
+            case EVENT_REFRESH:
+            case EVENT_REFRESH_OEM:
+                ar = (AsyncResult)msg.obj;
+                index = (Integer)ar.userObj;
+                logi(" Received SIM refresh, reset sub state " +
+                        index + " old sub state " + mSubStatus[index]);
+                mSubStatus[index] = SUB_INIT_STATE;
                 break;
            default:
            break;
@@ -154,9 +182,13 @@ class SubscriptionHelper extends Handler {
     }
 
     public void updateSubActivation(int[] simStatus, boolean isStackReadyEvent) {
+        boolean isPrimarySubFeatureEnable =
+               SystemProperties.getBoolean("persist.radio.primarycard", false);
         SubscriptionController subCtrlr = SubscriptionController.getInstance();
         boolean setUiccSent = false;
-        if (isStackReadyEvent) {
+        // When isPrimarySubFeatureEnable is enabled apps will take care
+        // of sending DDS on MMode SUB so no need of triggering DDS from here.
+        if (isStackReadyEvent && !isPrimarySubFeatureEnable) {
             sTriggerDds = true;
         }
 
@@ -228,24 +260,26 @@ class SubscriptionHelper extends Handler {
      * @param ar
      */
     private void processSetUiccSubscriptionDone(Message msg) {
+        SubscriptionController subCtrlr = SubscriptionController.getInstance();
         AsyncResult ar = (AsyncResult)msg.obj;
         int slotId = msg.arg1;
         int newSubState = msg.arg2;
+        long[] subId = subCtrlr.getSubIdUsingSlotId(slotId);
 
         if (ar.exception != null) {
-            logd("Exception in SET_UICC_SUBSCRIPTION, slotId = " + slotId);
+            loge("Exception in SET_UICC_SUBSCRIPTION, slotId = " + slotId
+                    + " newSubState " + newSubState);
+            // broadcast set uicc failure
+            mSubStatus[slotId] = SUB_SET_UICC_FAIL;
+            broadcastSetUiccResult(slotId, newSubState, PhoneConstants.FAILURE);
             return;
         }
 
-        SubscriptionController subCtrlr = SubscriptionController.getInstance();
-        if (subCtrlr != null) {
-            long[] subId = subCtrlr.getSubIdUsingSlotId(slotId);
-            int subStatus = subCtrlr.getSubState(subId[0]);
-
-            if (newSubState != subStatus) {
-                subCtrlr.setSubState(subId[0], newSubState);
-            }
+        int subStatus = subCtrlr.getSubState(subId[0]);
+        if (newSubState != subStatus) {
+            subCtrlr.setSubState(subId[0], newSubState);
         }
+        broadcastSetUiccResult(slotId, newSubState, PhoneConstants.SUCCESS);
 
         mSubStatus[slotId] = newSubState;
         // After activating all subs, updated the user preferred sub values
@@ -257,6 +291,16 @@ class SubscriptionHelper extends Handler {
         }
     }
 
+    private void broadcastSetUiccResult(int slotId, int newSubState, int result) {
+        long[] subId = SubscriptionController.getInstance().getSubIdUsingSlotId(slotId);
+        Intent intent = new Intent(TelephonyIntents.ACTION_SUBSCRIPTION_SET_UICC_RESULT);
+        intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
+        SubscriptionManager.putPhoneIdAndSubIdExtra(intent, slotId, subId[0]);
+        intent.putExtra(TelephonyIntents.EXTRA_RESULT, result);
+        intent.putExtra(TelephonyIntents.EXTRA_NEW_SUB_STATE, newSubState);
+        mContext.sendStickyBroadcastAsUser(intent, UserHandle.ALL);
+    }
+
     private boolean isAllSubsAvailable() {
         boolean allSubsAvailable = true;
 
@@ -266,6 +310,44 @@ class SubscriptionHelper extends Handler {
             }
         }
         return allSubsAvailable;
+    }
+
+    public boolean isRadioOn(int phoneId) {
+        return mCi[phoneId].getRadioState().isOn();
+    }
+
+    public boolean isRadioAvailable(int phoneId) {
+        return mCi[phoneId].getRadioState().isAvailable();
+    }
+
+    public boolean isApmSIMNotPwdn() {
+        return sApmSIMNotPwdn;
+    }
+
+    public boolean proceedToHandleIccEvent(int slotId) {
+        int apmState = Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.AIRPLANE_MODE_ON, 0);
+
+        // If SIM powers down in APM, telephony needs to send SET_UICC
+        // once radio turns ON also do not handle process SIM change events
+        if ((!sApmSIMNotPwdn) && (!isRadioOn(slotId) || (apmState == 1))) {
+            logi(" proceedToHandleIccEvent, radio off/unavailable, slotId = " + slotId);
+            mSubStatus[slotId] = SUB_INIT_STATE;
+        }
+
+        // Do not handle if SIM powers down in APM mode
+        if ((apmState == 1) && (!sApmSIMNotPwdn)) {
+            logd(" proceedToHandleIccEvent, sApmSIMNotPwdn = " + sApmSIMNotPwdn);
+            return false;
+        }
+
+
+        // Seems SSR happenned or RILD crashed, do not handle SIM change events
+        if (!isRadioAvailable(slotId)) {
+            logi(" proceedToHandleIccEvent, radio not available, slotId = " + slotId);
+            return false;
+        }
+        return true;
     }
 
     private static void logd(String message) {
