@@ -171,11 +171,20 @@ public class SubscriptionController extends ISub.Stub {
             int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
                     SubscriptionManager.INVALID_SUBSCRIPTION_ID);
             if (intent.getAction().equals(TelephonyIntents.SPN_STRINGS_UPDATED_ACTION)) {
-                setPlmnSpn(subId,
-                        intent.getBooleanExtra(TelephonyIntents.EXTRA_SHOW_PLMN, false),
-                        intent.getStringExtra(TelephonyIntents.EXTRA_PLMN),
-                        intent.getBooleanExtra(TelephonyIntents.EXTRA_SHOW_SPN, false),
-                        intent.getStringExtra(TelephonyIntents.EXTRA_SPN));
+                if (intent.getBooleanExtra(TelephonyIntents.EXTRA_SHOW_PLMN, false)) {
+                    String carrierText = intent.getStringExtra(TelephonyIntents.EXTRA_PLMN);
+                    if (intent.getBooleanExtra(TelephonyIntents.EXTRA_SHOW_SPN, false)) {
+                        // Need to show both plmn and spn.
+                        String separator = mContext.getString(
+                                com.android.internal.R.string.kg_text_message_separator).toString();
+                        carrierText = new StringBuilder().append(carrierText).append(separator)
+                                .append(intent.getStringExtra(TelephonyIntents.EXTRA_SPN))
+                                .toString();
+                    }
+                    setCarrierText(carrierText, subId);
+                } else if (intent.getBooleanExtra(TelephonyIntents.EXTRA_SHOW_SPN, false)) {
+                    setCarrierText(intent.getStringExtra(TelephonyIntents.EXTRA_PLMN), subId);
+                }
             }
         }
     };
@@ -851,11 +860,13 @@ public class SubscriptionController extends ISub.Stub {
      * @param spn spn to be included in carrier text
      * @return true if carrier text is set, false otherwise
      */
-    public boolean setPlmnSpn(int subId, boolean showPlmn, String plmn,
+    public boolean setPlmnSpn(int slotId, boolean showPlmn, String plmn,
             boolean showSpn, String spn) {
+        int[] subIds = getSubId(slotId);
         if (mContext.getPackageManager().resolveContentProvider(
                 SubscriptionManager.CONTENT_URI.getAuthority(), 0) == null ||
-                !SubscriptionManager.isValidSubscriptionId(subId)) {
+                subIds == null ||
+                !SubscriptionManager.isValidSubscriptionId(subIds[0])) {
             // No place to store this info. Notify registrants of the change anyway as they
             // might retrieve the SPN/PLMN text from the SST sticky broadcast.
             // TODO: This can be removed once SubscriptionController is not running on devices
@@ -864,37 +875,22 @@ public class SubscriptionController extends ISub.Stub {
             notifySubscriptionInfoChanged();
             return false;
         }
-
-        if (plmn != null && showPlmn && spn != null && showSpn) {
-            if (mContext.getResources().getBoolean(
-                    com.android.internal.R.bool.config_spn_display_control)) {
-                logd("[setPlmnSpn] Do not display SPN string when PLMN and SPN both need to show"
-                        + "and PLMN string is not null");
-                showSpn = false;
-            }
-        }
-
-        final String carrierText;
+        String carrierText = "";
         if (showPlmn) {
+            carrierText = plmn;
             if (showSpn) {
                 // Need to show both plmn and spn.
                 String separator = mContext.getString(
                         com.android.internal.R.string.kg_text_message_separator).toString();
-                carrierText = new StringBuilder()
-                        .append(plmn)
-                        .append(separator)
-                        .append(spn)
+                carrierText = new StringBuilder().append(carrierText).append(separator).append(spn)
                         .toString();
-            } else {
-                carrierText = plmn;
             }
         } else if (showSpn) {
             carrierText = spn;
-        } else {
-            carrierText = "";
         }
-
-        setCarrierText(carrierText, subId);
+        for (int i = 0; i < subIds.length; i++) {
+            setCarrierText(carrierText, subIds[i]);
+        }
         return true;
     }
 
