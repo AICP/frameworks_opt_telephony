@@ -138,15 +138,27 @@ public class DcSwitchStateMachine extends StateMachine {
                         log("IdleState: EVENT_DATA_ATTACHED");
                     }
 
-                    if (ddsPhoneId == mId) {
+                    int dataRat = mPhone.getServiceState().getRilDataRadioTechnology();
+                    if (dataRat == ServiceState.RIL_RADIO_TECHNOLOGY_IWLAN) {
+                        if (DBG) {
+                            log("IdleState: IWLAN reported in IDLE state");
+                        }
+                        transitionTo(mAttachedState);
+                    } else if (DctController.getInstance().isDataAllowedOnPhoneId(mId)) {
                         if (DBG) {
                             log("IdleState: DDS sub reported ATTACHed in IDLE state");
                         }
                         /* Move to AttachingState and handle this ATTACH msg over there.
                          * This would ensure that Modem gets a ALLOW_DATA(true)
                          */
-                        deferMessage(msg);
-                        transitionTo(mAttachingState);
+                        if (ServiceState.isCdma(dataRat)) {
+                            deferMessage(msg);
+                            transitionTo(mAttachingState);
+                        } else {
+                            transitionTo(mAttachedState);
+                        }
+                    } else {
+                        if (DBG) log("IdleState: ignore ATATCHed event as data is not allowed");
                     }
                     retVal = HANDLED;
                     break;
@@ -249,6 +261,7 @@ public class DcSwitchStateMachine extends StateMachine {
             final PhoneBase pb = (PhoneBase)((PhoneProxy)mPhone).getActivePhone();
             pb.mCi.setDataAllowed(true, obtainMessage(EVENT_DATA_ALLOWED,
                     ++mCurrentAllowedSequence, 0));
+            DctController.getInstance().resetDdsSwitchNeededFlag();
             // if we're on a carrier that unattaches us if we're idle for too long
             // (on wifi) and they won't re-attach until we poke them.  Poke them!
             // essentially react as Attached does here in Attaching.
@@ -440,7 +453,22 @@ public class DcSwitchStateMachine extends StateMachine {
                     apnRequest.log("DcSwitchStateMachine.AttachedState: REQ_CONNECT");
                     if (DBG) log("AttachedState: REQ_CONNECT, apnRequest=" + apnRequest);
 
-                    DctController.getInstance().executeRequest(apnRequest);
+                    int dataRat = mPhone.getServiceState().getRilDataRadioTechnology();
+                    if (dataRat == ServiceState.RIL_RADIO_TECHNOLOGY_IWLAN &&
+                             DctController.getInstance().isDdsSwitchNeeded()) {
+                        SubscriptionController subController = SubscriptionController.getInstance();
+                        int ddsSubId = subController.getDefaultDataSubId();
+                        int ddsPhoneId = subController.getPhoneId(ddsSubId);
+                        if (mId == ddsPhoneId) {
+                            logd("AttachedState: Already attached on IWLAN. " +
+                                    "Retry Allow Data for Dds switch");
+                            transitionTo(mAttachingState);
+                        } else {
+                            DctController.getInstance().executeRequest(apnRequest);
+                        }
+                    } else {
+                        DctController.getInstance().executeRequest(apnRequest);
+                    }
                     retVal = HANDLED;
                     break;
                 }

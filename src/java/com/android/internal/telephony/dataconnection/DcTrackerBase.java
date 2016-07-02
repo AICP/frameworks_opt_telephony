@@ -97,7 +97,7 @@ public abstract class DcTrackerBase extends Handler {
 
     /** Delay between APN attempts.
         Note the property override mechanism is there just for testing purpose only. */
-    protected static final int APN_DELAY_DEFAULT_MILLIS = 20000;
+    protected static final int APN_DELAY_DEFAULT_MILLIS = 3000;
 
     /** Delay between APN attempts when in fail fast mode */
     protected static final int APN_FAIL_FAST_DELAY_DEFAULT_MILLIS = 3000;
@@ -1385,16 +1385,16 @@ public abstract class DcTrackerBase extends Handler {
 
     protected void onSetUserDataEnabled(boolean enabled, int subId) {
         synchronized (mDataEnabledLock) {
+            // For single SIM phones, this is a per phone property.
+            if (TelephonyManager.getDefault().getSimCount() == 1) {
+                Settings.Global.putInt(mResolver, Settings.Global.MOBILE_DATA, enabled ? 1 : 0);
+            } else {
+                Settings.Global.putInt(mResolver, Settings.Global.MOBILE_DATA + subId,
+                        enabled ? 1 : 0);
+            }
+
             if (mUserDataEnabled != enabled) {
                 mUserDataEnabled = enabled;
-
-                // For single SIM phones, this is a per phone property.
-                if (TelephonyManager.getDefault().getSimCount() == 1) {
-                    Settings.Global.putInt(mResolver, Settings.Global.MOBILE_DATA, enabled ? 1 : 0);
-                } else {
-                    Settings.Global.putInt(mResolver, Settings.Global.MOBILE_DATA + subId,
-                            enabled ? 1 : 0);
-                }
                 if (getDataOnRoamingEnabled() == false &&
                         mPhone.getServiceState().getDataRoaming() == true) {
                     if (enabled) {
