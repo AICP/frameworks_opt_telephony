@@ -65,7 +65,7 @@ public class SubscriptionInfoUpdater extends Handler {
 
     private static final boolean DBG = false;
 
-    private static final int EVENT_SIM_LOCKED_QUERY_ICCID_DONE = 1;
+    protected static final int EVENT_SIM_LOCKED_QUERY_ICCID_DONE = 1;
     private static final int EVENT_GET_NETWORK_SELECTION_MODE_DONE = 2;
     private static final int EVENT_SIM_LOADED = 3;
     private static final int EVENT_SIM_ABSENT = 4;
@@ -365,7 +365,7 @@ public class SubscriptionInfoUpdater extends Handler {
             case EVENT_UPDATE_INSERTED_SIM_COUNT:
                 logd("EVENT_UPDATE_INSERTED_SIM_COUNT: locked sims: " + mLockedSims.cardinality());
                 if (isAllIccIdQueryDone() && !hasMessages(EVENT_UPDATE_INSERTED_SIM_COUNT)) {
-                    updateSubscriptionInfoByIccId();
+                    updateSubscriptionInfoByIccIdInternal(false);
                     logd("update inserted sim count, current sim count: " + mCurrentSimCount);
                 }
                 break;
@@ -399,7 +399,7 @@ public class SubscriptionInfoUpdater extends Handler {
             if (iccId == null) {
                 logd("Querying IccId");
                 fileHandler.loadEFTransparent(IccConstants.EF_ICCID,
-                        obtainMessage(EVENT_SIM_LOCKED_QUERY_ICCID_DONE,
+                        obtainMessage(EVENT_SIM_LOCKED_QUERY_ICCID_DONE, slotId, -1,
                                 new QueryIccIdUserObj(reason, slotId)));
             } else {
                 logd("NOT Querying IccId its already set sIccid[" + slotId + "]=" + iccId);
@@ -415,11 +415,11 @@ public class SubscriptionInfoUpdater extends Handler {
     private void update(int slotId) {
         sendMessageDelayed(obtainMessage(EVENT_UPDATE_INSERTED_SIM_COUNT, slotId), DELAY_MILLIS);
         if (isAllIccIdQueryDone()) {
-            updateSubscriptionInfoByIccId();
+            updateSubscriptionInfoByIccIdInternal(false);
         }
     }
 
-    private void handleSimLoaded(int slotId) {
+    protected void handleSimLoaded(int slotId) {
         logd("handleSimStateLoadedInternal: slotId: " + slotId);
 
         // The SIM should be loaded at this state, but it is possible in cases such as SIM being
@@ -614,10 +614,14 @@ public class SubscriptionInfoUpdater extends Handler {
      * only what the current list contains.
      */
     synchronized protected void updateSubscriptionInfoByIccId() {
+        updateSubscriptionInfoByIccIdInternal(true);
+    }
+
+    synchronized private void updateSubscriptionInfoByIccIdInternal(boolean forceUpdate) {
         logd("updateSubscriptionInfoByIccId:+ Start");
 
         // only update external state if we have no pending updates pending
-        boolean update = !hasMessages(EVENT_UPDATE_INSERTED_SIM_COUNT);
+        boolean update = !hasMessages(EVENT_UPDATE_INSERTED_SIM_COUNT) || forceUpdate;
         if (update) {
             mSubscriptionManager.clearSubscriptionInfo();
         }
