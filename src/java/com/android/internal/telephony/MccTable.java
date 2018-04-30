@@ -431,7 +431,7 @@ public final class MccTable {
      * @param mcc Mobile Country Code of the operator.  0 if not known
      */
     private static void setWifiCountryCodeFromMcc(Context context, int mcc) {
-        String country = MccTable.countryCodeForMcc(mcc);
+        String country = MccTable.countryCodeForMcc(0);
         Slog.d(LOG_TAG, "WIFI_COUNTRY_CODE set to " + country);
         WifiManager wM = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
         wM.setCountryCode(country, false);
