@@ -2152,11 +2152,7 @@ public class GsmCdmaPhone extends Phone {
             // Complete pending USSD
 
             if (isUssdRelease) {
-                if (SystemProperties.getBoolean("ro.telephony.ril.hisi", false)) {
-                    found.onUssdFinished(ussdMessage, isUssdRequest);
-                } else {
-                    found.onUssdRelease();
-                }
+                found.onUssdRelease();
             } else if (isUssdError) {
                 found.onUssdFinishedError();
             } else {
