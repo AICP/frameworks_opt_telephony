@@ -1694,7 +1694,7 @@ public class RadioResponse extends IRadioResponse.Stub {
         RILRequest rr = mRil.processResponse(responseInfo);
 
         if (rr != null) {
-            SignalStrength ret = RIL.convertHalSignalStrength(signalStrength, mRil.mPhoneId);
+            SignalStrength ret = RIL.convertHalSignalStrength(signalStrength);
             if (responseInfo.error == RadioError.NONE) {
                 sendMessageResponse(rr.mResult, ret);
             }
