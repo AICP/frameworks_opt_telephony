@@ -105,9 +105,10 @@ public class SubscriptionInfoUpdater extends Handler {
     @UnsupportedAppUsage
     private static Context mContext = null;
     @UnsupportedAppUsage
-    private static String mIccId[] = new String[PROJECT_SIM_NUM];
+    protected static String mIccId[] = new String[PROJECT_SIM_NUM];
     private static int[] sSimCardState = new int[PROJECT_SIM_NUM];
     private static int[] sSimApplicationState = new int[PROJECT_SIM_NUM];
+    private boolean[] mIsRecordLoaded = new boolean[PROJECT_SIM_NUM];
     private static boolean sIsSubInfoInitialized = false;
     private SubscriptionManager mSubscriptionManager = null;
     private EuiccManager mEuiccManager;
@@ -155,6 +156,10 @@ public class SubscriptionInfoUpdater extends Handler {
 
         mCarrierServiceBindHelper = new CarrierServiceBindHelper(mContext);
         initializeCarrierApps();
+
+        for (int index = 0; index < PROJECT_SIM_NUM; index++) {
+            mIsRecordLoaded[index] = false;
+        }
     }
 
     private void initializeCarrierApps() {
@@ -221,7 +226,7 @@ public class SubscriptionInfoUpdater extends Handler {
     }
 
     @UnsupportedAppUsage
-    private boolean isAllIccIdQueryDone() {
+    protected boolean isAllIccIdQueryDone() {
         for (int i = 0; i < PROJECT_SIM_NUM; i++) {
             UiccSlot slot = UiccController.getInstance().getUiccSlotForPhone(i);
             int slotId = UiccController.getInstance().getSlotIdFromPhoneId(i);
@@ -353,7 +358,7 @@ public class SubscriptionInfoUpdater extends Handler {
                 EVENT_REFRESH_EMBEDDED_SUBSCRIPTIONS, cardId, 0 /* arg2 */, callback));
     }
 
-    private void handleSimLocked(int slotId, String reason) {
+    protected void handleSimLocked(int slotId, String reason) {
         if (mIccId[slotId] != null && mIccId[slotId].equals(ICCID_STRING_FOR_NO_SIM)) {
             logd("SIM" + (slotId + 1) + " hot plug in");
             mIccId[slotId] = null;
@@ -423,7 +428,7 @@ public class SubscriptionInfoUpdater extends Handler {
         broadcastSimApplicationStateChanged(slotId, TelephonyManager.SIM_STATE_NOT_READY);
     }
 
-    private void handleSimLoaded(int slotId) {
+    protected void handleSimLoaded(int slotId) {
         logd("handleSimLoaded: slotId: " + slotId);
 
         // The SIM should be loaded at this state, but it is possible in cases such as SIM being
@@ -445,6 +450,7 @@ public class SubscriptionInfoUpdater extends Handler {
             return;
         }
         mIccId[slotId] = IccUtils.stripTrailingFs(records.getFullIccId());
+        mIsRecordLoaded[slotId] = true;
 
         updateSubscriptionInfoByIccId(slotId, true /* updateEmbeddedSubs */);
         List<SubscriptionInfo> subscriptionInfos = SubscriptionController.getInstance()
@@ -458,7 +464,7 @@ public class SubscriptionInfoUpdater extends Handler {
                         mContext.getSystemService(Context.TELEPHONY_SERVICE);
                 String operator = tm.getSimOperatorNumeric(subId);
 
-                if (!TextUtils.isEmpty(operator)) {
+                if (operator != null && !TextUtils.isEmpty(operator)) {
                     if (subId == SubscriptionController.getInstance().getDefaultSubId()) {
                         MccTable.updateMccMncConfiguration(mContext, operator);
                     }
@@ -514,6 +520,7 @@ public class SubscriptionInfoUpdater extends Handler {
                             Rlog.e(LOG_TAG, "Settings Exception Reading Value At Index for "
                                     + "Settings.Global.PREFERRED_NETWORK_MODE");
                         }
+
                         Settings.Global.putInt(
                                 mPhone[slotId].getContext().getContentResolver(),
                                 Global.PREFERRED_NETWORK_MODE + subId,
@@ -532,6 +539,20 @@ public class SubscriptionInfoUpdater extends Handler {
                     SharedPreferences.Editor editor = sp.edit();
                     editor.putInt(CURR_SUBID + slotId, subId);
                     editor.apply();
+                }
+
+                // Update set of enabled carrier apps now that the privilege rules may have changed.
+                CarrierAppUtils.disableCarrierAppsUntilPrivileged(mContext.getOpPackageName(),
+                        mPackageManager, TelephonyManager.getDefault(),
+                        mContext.getContentResolver(), mCurrentlyActiveUserId);
+
+                if (mIsRecordLoaded[slotId] == true) {
+                    broadcastSimStateChanged(slotId, IccCardConstants.
+                            INTENT_VALUE_ICC_LOADED, null);
+                    broadcastSimCardStateChanged(slotId, TelephonyManager.SIM_STATE_PRESENT);
+                    broadcastSimApplicationStateChanged(slotId, TelephonyManager.SIM_STATE_LOADED);
+                    updateCarrierServices(slotId, IccCardConstants.INTENT_VALUE_ICC_LOADED);
+                    mIsRecordLoaded[slotId] = false;
                 }
             }
         }
@@ -569,7 +590,7 @@ public class SubscriptionInfoUpdater extends Handler {
         }
     }
 
-    private void handleSimAbsent(int slotId, int absentAndInactive) {
+    protected void handleSimAbsent(int slotId, int absentAndInactive) {
         if (mIccId[slotId] != null && !mIccId[slotId].equals(ICCID_STRING_FOR_NO_SIM)) {
             logd("SIM" + (slotId + 1) + " hot plug out, absentAndInactive=" + absentAndInactive);
         }
@@ -586,7 +607,7 @@ public class SubscriptionInfoUpdater extends Handler {
         }
     }
 
-    private void handleSimError(int slotId) {
+    protected void handleSimError(int slotId) {
         if (mIccId[slotId] != null && !mIccId[slotId].equals(ICCID_STRING_FOR_NO_SIM)) {
             logd("SIM" + (slotId + 1) + " Error ");
         }
@@ -600,7 +621,7 @@ public class SubscriptionInfoUpdater extends Handler {
         updateCarrierServices(slotId, IccCardConstants.INTENT_VALUE_ICC_CARD_IO_ERROR);
     }
 
-    private synchronized void updateSubscriptionInfoByIccId(int slotIndex,
+    synchronized protected void updateSubscriptionInfoByIccId(int slotIndex,
             boolean updateEmbeddedSubs) {
         logd("updateSubscriptionInfoByIccId:+ Start");
         if (!SubscriptionManager.isValidSlotIndex(slotIndex)) {
