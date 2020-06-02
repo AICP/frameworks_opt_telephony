@@ -253,7 +253,7 @@ public class TelephonyNetworkFactory extends NetworkFactory {
                 requestNetworkInternal(networkRequest, DcTracker.REQUEST_TYPE_NORMAL,
                         getTransportTypeFromNetworkRequest(networkRequest), null);
             } else if (action == ACTION_RELEASE) {
-                releaseNetworkInternal(networkRequest, DcTracker.RELEASE_TYPE_DETACH,
+                releaseNetworkInternal(networkRequest, DcTracker.RELEASE_TYPE_NORMAL,
                         getTransportTypeFromNetworkRequest(networkRequest));
             }
 
@@ -292,8 +292,9 @@ public class TelephonyNetworkFactory extends NetworkFactory {
 
     private void onNeedNetworkFor(Message msg) {
         NetworkRequest networkRequest = (NetworkRequest) msg.obj;
-        if (networkRequest.type != NetworkRequest.Type.REQUEST) {
-           logl("Skip non REQUEST type request: " + networkRequest);
+        if (networkRequest.type != NetworkRequest.Type.REQUEST &&
+                 networkRequest.type != NetworkRequest.Type.BACKGROUND_REQUEST) {
+           logl("Skip non REQUEST/BACKGROUND_REQUEST type request: " + networkRequest);
            return;
         }
         boolean shouldApply = mPhoneSwitcher.shouldApplyNetworkRequest(
@@ -344,6 +345,7 @@ public class TelephonyNetworkFactory extends NetworkFactory {
         if (mTransportManager.getCurrentTransport(apnType) == targetTransport) {
             log("APN type " + ApnSetting.getApnTypeString(apnType) + " is already on "
                     + AccessNetworkConstants.transportTypeToString(targetTransport));
+            handoverParams.callback.onCompleted(true, false);
             return;
         }
 

@@ -98,7 +98,6 @@ import com.android.internal.telephony.LocaleTracker;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.PhoneFactory;
-import com.android.internal.telephony.PhoneInternalInterface;
 import com.android.internal.telephony.ServiceStateTracker;
 import com.android.internal.telephony.SubscriptionController;
 import com.android.internal.telephony.TelephonyProperties;
@@ -310,7 +309,6 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
     private static final int EVENT_ANSWER_WAITING_CALL = 30;
     private static final int EVENT_RESUME_NOW_FOREGROUND_CALL = 31;
     private static final int EVENT_REDIAL_WITHOUT_RTT = 32;
-    private static final int EVENT_RETRY_ON_IMS_WITHOUT_RTT = 40;
 
     private static final int TIMEOUT_HANGUP_PENDINGMO = 500;
 
@@ -2571,9 +2569,9 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
                         .getSystemService(Context.CONNECTIVITY_SERVICE);
                 mgr.setAirplaneMode(false);
                 return;
-            } else if (reasonInfo.getCode() == QtiImsUtils.CODE_RETRY_ON_IMS_WITHOUT_RTT) {
+            } else if (reasonInfo.getCode() == ImsReasonInfo.CODE_RETRY_ON_IMS_WITHOUT_RTT) {
                 Pair<ImsCall, ImsReasonInfo> callInfo = new Pair<>(imsCall, reasonInfo);
-                sendMessage(obtainMessage(EVENT_RETRY_ON_IMS_WITHOUT_RTT, callInfo));
+                sendMessage(obtainMessage(EVENT_REDIAL_WITHOUT_RTT, callInfo));
                 return;
             } else {
                 processCallStateChange(imsCall, ImsPhoneCall.State.DISCONNECTED, cause);
@@ -3670,14 +3668,14 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
                 sendCallStartFailedDisconnect(callInfo.first, callInfo.second);
                 break;
             }
-            case EVENT_RETRY_ON_IMS_WITHOUT_RTT: {
+            case EVENT_REDIAL_WITHOUT_RTT: {
                 Pair<ImsCall, ImsReasonInfo> callInfo = (Pair<ImsCall, ImsReasonInfo>) msg.obj;
-
+                removeMessages(EVENT_REDIAL_WITHOUT_RTT);
                 ImsPhoneConnection oldConnection = findConnection(callInfo.first);
                 if (oldConnection == null) {
                     sendCallStartFailedDisconnect(callInfo.first, callInfo.second);
-                    loge("EVENT_RETRY_ON_IMS_WITHOUT_RTT: null oldConnection");
-                    return;
+                    loge("EVENT_REDIAL_WITHOUT_RTT: null oldConnection");
+                    break;
                 }
                 mForegroundCall.detach(oldConnection);
                 removeConnection(oldConnection);
