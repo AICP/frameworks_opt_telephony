@@ -3766,7 +3766,6 @@ public class SubscriptionController extends ISub.Stub {
         SubscriptionInfo result = new SubscriptionInfo(subInfo);
         if (!hasIdentifierAccess) {
             result.clearIccId();
-            result.clearCardString();
         }
         return result;
     }
