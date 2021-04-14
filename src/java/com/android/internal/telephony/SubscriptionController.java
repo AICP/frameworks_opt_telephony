@@ -311,24 +311,6 @@ public class SubscriptionController extends ISub.Stub {
     }
 
     /**
-     * Returns whether the {@code callingPackage} has access to subscriber identifiers on the
-     * specified {@code subId} using the provided {@code message} in any resulting
-     * SecurityException.
-     */
-    private boolean hasSubscriberIdentifierAccess(int subId, String callingPackage,
-            String message) {
-        try {
-            return TelephonyPermissions.checkCallingOrSelfReadSubscriberIdentifiers(mContext, subId,
-                    callingPackage, message);
-        } catch (SecurityException e) {
-            // A SecurityException indicates that the calling package is targeting at least the
-            // minimum level that enforces identifier access restrictions and the new access
-            // requirements are not met.
-            return false;
-        }
-    }
-
-    /**
      * Broadcast when SubscriptionInfo has changed
      * FIXME: Hopefully removed if the API council accepts SubscriptionInfoListener
      */
@@ -559,26 +541,26 @@ public class SubscriptionController extends ISub.Stub {
 
         // Now that all security checks passes, perform the operation as ourselves.
         final long identity = Binder.clearCallingIdentity();
-        List<SubscriptionInfo> subList;
         try {
-            subList = getActiveSubscriptionInfoList(mContext.getOpPackageName());
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
-        if (subList != null) {
-            for (SubscriptionInfo si : subList) {
-                if (si.getSubscriptionId() == subId) {
-                    if (VDBG) {
-                        logd("[getActiveSubscriptionInfo]+ subId=" + subId + " subInfo=" + si);
+            List<SubscriptionInfo> subList = getActiveSubscriptionInfoList(
+                    mContext.getOpPackageName());
+            if (subList != null) {
+                for (SubscriptionInfo si : subList) {
+                    if (si.getSubscriptionId() == subId) {
+                        if (DBG) {
+                            logd("[getActiveSubscriptionInfo]+ subId=" + subId + " subInfo=" + si);
+                        }
+
+                        return si;
                     }
-                    return conditionallyRemoveIdentifiers(si, callingPackage,
-                            "getActiveSubscriptionInfo");
                 }
             }
-        }
-        if (DBG) {
-            logd("[getActiveSubscriptionInfo]- subId=" + subId
-                    + " subList=" + subList + " subInfo=null");
+            if (DBG) {
+                logd("[getActiveSubscriptionInfo]- subId=" + subId
+                        + " subList=" + subList + " subInfo=null");
+            }
+        } finally {
+            Binder.restoreCallingIdentity(identity);
         }
 
         return null;
@@ -678,33 +660,31 @@ public class SubscriptionController extends ISub.Stub {
 
         // Now that all security checks passes, perform the operation as ourselves.
         final long identity = Binder.clearCallingIdentity();
-        List<SubscriptionInfo> subList;
         try {
-            subList = getActiveSubscriptionInfoList(mContext.getOpPackageName());
+            List<SubscriptionInfo> subList = getActiveSubscriptionInfoList(
+                    mContext.getOpPackageName());
+            if (subList != null) {
+                for (SubscriptionInfo si : subList) {
+                    if (si.getSimSlotIndex() == slotIndex) {
+                        if (DBG) {
+                            logd("[getActiveSubscriptionInfoForSimSlotIndex]+ slotIndex="
+                                    + slotIndex + " subId=" + si);
+                        }
+                        return si;
+                    }
+                }
+                if (DBG) {
+                    logd("[getActiveSubscriptionInfoForSimSlotIndex]+ slotIndex=" + slotIndex
+                            + " subId=null");
+                }
+            } else {
+                if (DBG) {
+                    logd("[getActiveSubscriptionInfoForSimSlotIndex]+ subList=null");
+                }
+            }
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
-        if (subList != null) {
-            for (SubscriptionInfo si : subList) {
-                if (si.getSimSlotIndex() == slotIndex) {
-                    if (DBG) {
-                        logd("[getActiveSubscriptionInfoForSimSlotIndex]+ slotIndex="
-                                + slotIndex + " subId=" + si);
-                    }
-                    return conditionallyRemoveIdentifiers(si, callingPackage,
-                            "getActiveSubscriptionInfoForSimSlotIndex");
-                }
-            }
-            if (DBG) {
-                logd("[getActiveSubscriptionInfoForSimSlotIndex]+ slotIndex=" + slotIndex
-                        + " subId=null");
-            }
-        } else {
-            if (DBG) {
-                logd("[getActiveSubscriptionInfoForSimSlotIndex]+ subList=null");
-            }
-        }
-
 
         return null;
     }
@@ -3407,9 +3387,7 @@ public class SubscriptionController extends ISub.Stub {
             return TelephonyPermissions.checkCallingOrSelfReadPhoneState(mContext, subId,
                     callingPackage, "getSubscriptionsInGroup")
                     || info.canManageSubscription(mContext, callingPackage);
-        }).map(subscriptionInfo -> conditionallyRemoveIdentifiers(subscriptionInfo,
-                callingPackage, "getSubscriptionInfoList"))
-        .collect(Collectors.toList());
+        }).collect(Collectors.toList());
     }
 
     public ParcelUuid getGroupUuid(int subId) {
@@ -3681,14 +3659,6 @@ public class SubscriptionController extends ISub.Stub {
             canReadAllPhoneState = TelephonyPermissions.checkReadPhoneState(mContext,
                     SubscriptionManager.INVALID_SUBSCRIPTION_ID, Binder.getCallingPid(),
                     Binder.getCallingUid(), callingPackage, "getSubscriptionInfoList");
-            // If the calling package has the READ_PHONE_STATE permission then check if the caller
-            // also has access to subscriber identifiers to ensure that the ICC ID and any other
-            // unique identifiers are removed if the caller should not have access.
-            if (canReadAllPhoneState) {
-                canReadAllPhoneState = hasSubscriberIdentifierAccess(
-                        SubscriptionManager.INVALID_SUBSCRIPTION_ID, callingPackage,
-                        "getSubscriptionInfoList");
-            }
         } catch (SecurityException e) {
             canReadAllPhoneState = false;
         }
@@ -3709,29 +3679,9 @@ public class SubscriptionController extends ISub.Stub {
                         } catch (SecurityException e) {
                             return false;
                         }
-                    }).map(subscriptionInfo -> conditionallyRemoveIdentifiers(subscriptionInfo,
-                            callingPackage, "getSubscriptionInfoList"))
+                    })
                     .collect(Collectors.toList());
         }
-    }
-
-    /**
-     * Conditionally removes identifiers from the provided {@code subInfo} if the {@code
-     * callingPackage} does not meet the access requirements for identifiers and returns the
-     * potentially modified object..
-     *
-     * <p>If the caller does not meet the access requirements for identifiers a clone of the
-     * provided SubscriptionInfo is created and modified to avoid altering SubscriptionInfo objects
-     * in a cache.
-     */
-    private SubscriptionInfo conditionallyRemoveIdentifiers(SubscriptionInfo subInfo,
-            String callingPackage,  String message) {
-        SubscriptionInfo result = subInfo;
-        if (!hasSubscriberIdentifierAccess(subInfo.getSubscriptionId(), callingPackage, message)) {
-            result = new SubscriptionInfo(subInfo);
-            result.clearIccId();
-        }
-        return result;
     }
 
     private synchronized boolean addToSubIdList(int slotIndex, int subId, int subscriptionType) {
