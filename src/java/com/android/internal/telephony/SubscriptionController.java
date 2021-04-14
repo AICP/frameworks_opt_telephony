@@ -743,12 +743,6 @@ public class SubscriptionController extends ISub.Stub {
         }
     }
 
-    private List<SubscriptionInfo> makeCacheListCopyWithLock(List<SubscriptionInfo> cacheSubList) {
-        synchronized (mSubInfoListLock) {
-            return new ArrayList<>(cacheSubList);
-        }
-    }
-
     /**
      * Get the SubInfoRecord(s) of the currently active SIM(s) - which include both local
      * and remote SIMs.
@@ -758,8 +752,7 @@ public class SubscriptionController extends ISub.Stub {
     @UnsupportedAppUsage
     @Override
     public List<SubscriptionInfo> getActiveSubscriptionInfoList(String callingPackage) {
-        return getSubscriptionInfoListFromCacheHelper(callingPackage,
-                makeCacheListCopyWithLock(mCacheActiveSubInfoList));
+        return getSubscriptionInfoListFromCacheHelper(callingPackage, mCacheActiveSubInfoList);
     }
 
     /**
@@ -770,13 +763,13 @@ public class SubscriptionController extends ISub.Stub {
     public void refreshCachedActiveSubscriptionInfoList() {
         boolean opptSubListChanged;
 
-        List<SubscriptionInfo> activeSubscriptionInfoList = getSubInfo(
-                SubscriptionManager.SIM_SLOT_INDEX + ">=0 OR "
-                + SubscriptionManager.SUBSCRIPTION_TYPE + "="
-                + SubscriptionManager.SUBSCRIPTION_TYPE_REMOTE_SIM,
-                null);
-
         synchronized (mSubInfoListLock) {
+            List<SubscriptionInfo> activeSubscriptionInfoList = getSubInfo(
+                    SubscriptionManager.SIM_SLOT_INDEX + ">=0 OR "
+                    + SubscriptionManager.SUBSCRIPTION_TYPE + "="
+                    + SubscriptionManager.SUBSCRIPTION_TYPE_REMOTE_SIM,
+                    null);
+
             if (activeSubscriptionInfoList != null) {
                 // Log when active sub info changes.
                 if (mCacheActiveSubInfoList.size() != activeSubscriptionInfoList.size()
@@ -791,6 +784,10 @@ public class SubscriptionController extends ISub.Stub {
                 logd("activeSubscriptionInfoList is null.");
                 mCacheActiveSubInfoList.clear();
             }
+
+            // Refresh cached opportunistic sub list and detect whether it's changed.
+            refreshCachedOpportunisticSubscriptionInfoList();
+
             if (DBG_CACHE) {
                 if (!mCacheActiveSubInfoList.isEmpty()) {
                     for (SubscriptionInfo si : mCacheActiveSubInfoList) {
@@ -802,9 +799,6 @@ public class SubscriptionController extends ISub.Stub {
                 }
             }
         }
-
-        // Refresh cached opportunistic sub list and detect whether it's changed.
-        refreshCachedOpportunisticSubscriptionInfoList();
     }
 
     /**
@@ -3044,8 +3038,8 @@ public class SubscriptionController extends ISub.Stub {
 
     @Override
     public List<SubscriptionInfo> getOpportunisticSubscriptions(String callingPackage) {
-        return getSubscriptionInfoListFromCacheHelper(callingPackage,
-                makeCacheListCopyWithLock(mCacheOpportunisticSubInfoList));
+        return getSubscriptionInfoListFromCacheHelper(
+                callingPackage, mCacheOpportunisticSubInfoList);
     }
 
     /**
@@ -3703,34 +3697,36 @@ public class SubscriptionController extends ISub.Stub {
             // the identifier and phone number access checks are not required.
         }
 
-        // If the caller can read all phone state, just return the full list.
-        if (canReadIdentifiers) {
-            return cacheSubList;
-        }
-        // Filter the list to only include subscriptions which the caller can manage.
-        List<SubscriptionInfo> subscriptions = new ArrayList<>(cacheSubList.size());
-        for (SubscriptionInfo subscriptionInfo : cacheSubList) {
-            int subId = subscriptionInfo.getSubscriptionId();
-            boolean hasCarrierPrivileges = TelephonyPermissions.checkCarrierPrivilegeForSubId(
-                    subId);
-            // If the caller does not have the READ_PHONE_STATE permission nor carrier
-            // privileges then they cannot access the current subscription.
-            if (!canReadPhoneState && !hasCarrierPrivileges) {
-                continue;
+        synchronized (mSubInfoListLock) {
+            // If the caller can read all phone state, just return the full list.
+            if (canReadIdentifiers) {
+                return new ArrayList<>(cacheSubList);
             }
-            // If the caller has carrier privileges then they are granted access to all
-            // identifiers for their subscription.
-            if (hasCarrierPrivileges) {
-                subscriptions.add(subscriptionInfo);
-            } else {
-                // The caller does not have carrier privileges for this subId, filter the
-                // identifiers in the subscription based on the results of the initial
-                // permission checks.
-                subscriptions.add(
-                        conditionallyRemoveIdentifiers(subscriptionInfo, canReadIdentifiers));
+            // Filter the list to only include subscriptions which the caller can manage.
+            List<SubscriptionInfo> subscriptions = new ArrayList<>(cacheSubList.size());
+            for (SubscriptionInfo subscriptionInfo : cacheSubList) {
+                int subId = subscriptionInfo.getSubscriptionId();
+                boolean hasCarrierPrivileges = TelephonyPermissions.checkCarrierPrivilegeForSubId(
+                        subId);
+                // If the caller does not have the READ_PHONE_STATE permission nor carrier
+                // privileges then they cannot access the current subscription.
+                if (!canReadPhoneState && !hasCarrierPrivileges) {
+                    continue;
+                }
+                // If the caller has carrier privileges then they are granted access to all
+                // identifiers for their subscription.
+                if (hasCarrierPrivileges) {
+                    subscriptions.add(subscriptionInfo);
+                } else {
+                    // The caller does not have carrier privileges for this subId, filter the
+                    // identifiers in the subscription based on the results of the initial
+                    // permission checks.
+                    subscriptions.add(
+                            conditionallyRemoveIdentifiers(subscriptionInfo, canReadIdentifiers));
+                }
             }
+            return subscriptions;
         }
-        return subscriptions;
     }
 
     /**
@@ -3829,12 +3825,13 @@ public class SubscriptionController extends ISub.Stub {
     }
 
     private void refreshCachedOpportunisticSubscriptionInfoList() {
-        List<SubscriptionInfo> subList = getSubInfo(
-                SubscriptionManager.IS_OPPORTUNISTIC + "=1 AND ("
-                        + SubscriptionManager.SIM_SLOT_INDEX + ">=0 OR "
-                        + SubscriptionManager.IS_EMBEDDED + "=1)", null);
         synchronized (mSubInfoListLock) {
             List<SubscriptionInfo> oldOpptCachedList = mCacheOpportunisticSubInfoList;
+
+            List<SubscriptionInfo> subList = getSubInfo(
+                    SubscriptionManager.IS_OPPORTUNISTIC + "=1 AND ("
+                            + SubscriptionManager.SIM_SLOT_INDEX + ">=0 OR "
+                            + SubscriptionManager.IS_EMBEDDED + "=1)", null);
 
             if (subList != null) {
                 subList.sort(SUBSCRIPTION_INFO_COMPARATOR);
