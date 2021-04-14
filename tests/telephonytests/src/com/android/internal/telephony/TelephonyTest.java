@@ -684,7 +684,8 @@ public abstract class TelephonyTest {
         // identifier access via an appop; ensure this query does not allow identifier access for
         // any packages.
         doReturn(AppOpsManager.MODE_DEFAULT).when(mAppOpsManager).noteOpNoThrow(
-                eq(AppOpsManager.OPSTR_READ_DEVICE_IDENTIFIERS), anyInt(), anyString());
+                eq(AppOpsManager.OPSTR_READ_DEVICE_IDENTIFIERS), anyInt(), anyString(),
+                nullable(String.class), nullable(String.class));
 
         // TelephonyPermissions queries DeviceConfig to determine if the identifier access
         // restrictions should be enabled; this results in a NPE when DeviceConfig uses
